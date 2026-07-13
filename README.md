@@ -2,6 +2,9 @@
 Contains code for intaking and plotting FPLC, UV, and MS data from our instruments. This is very incomplete and is meant as a tool to get started. 
 Please feel free to email me (zdinardo at sas.upenn.edu or zachdinardo at gmail.com) with questions or bugs. 
 
+## Streamlit app for lightweight FPLC plotting 
+For plotting FPLC traces, I have converted the FPLC plotting notebook into a web app. Going to https://bookerlabzd-code-fplc.streamlit.app/ will prompt you to upload your csv and then choose any parameters you want to plot, including axes, colors, fractions, peak labels, and more. Please let me know if other annotations or functionality would be helpful. It should be fairly self-explanatory. 
+
 ## Setup and virtual environment 
 <details>
     <summary> Click to expand </summary>
@@ -42,7 +45,7 @@ Lots of things should happen here as your computer downloads and installs all th
 If you are using an IDE to run the code, make sure it is pointing at the right python (google this, for example with VS code you will go to the command palette cmd/ctrl + shift + p and then type `python: select interpreter` and choose the one that starts with `./venv/` and is labeled "workspace"). 
 
 #### Adding all required packages / updating the requirements.txt file: 
-`requirements.txt` lists the major dependencies for this folder. To update this list, simply add the package to the list and match the formatting. To install them, run:
+`requirements.txt` lists the major dependencies for this folder. To update this list, simply add the package to the list and match the formatting. To install them, uncomment the jupyter line if you are using the notebooks, then run:
 ```bash
 pip install -r requirements.txt
 ```
