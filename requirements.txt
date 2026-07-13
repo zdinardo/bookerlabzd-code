@@ -1,5 +1,5 @@
 # Python 3.12+
-jupyter>=1.0.0
+# jupyter>=1.0.0
 matplotlib>=3.10.8
 numpy>=2.4.3
 pandas>=3.0.1
