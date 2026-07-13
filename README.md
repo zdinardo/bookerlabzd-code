@@ -5,9 +5,9 @@ Please feel free to email me (zdinardo at sas.upenn.edu or zachdinardo at gmail.
 ## Streamlit app for lightweight FPLC plotting 
 For plotting FPLC traces, I have converted the FPLC plotting notebook into a web app. Going to https://bookerlabzd-code-fplc.streamlit.app/ will prompt you to upload your csv and then choose any parameters you want to plot, including axes, colors, fractions, peak labels, and more. Please let me know if other annotations or functionality would be helpful. It should be fairly self-explanatory. 
 
-## Setup and virtual environment 
+## Setup and virtual environment (for jupyter notebooks)
 <details>
-    <summary> Click to expand </summary>
+    <summary> Click to expand setup instructions </summary>
 
 ### First time setup of the Virtual Environment (venv) 
 It is recommended to use a virtual environment (venv) to manage the installation of python packages used to run the code in this folder. This is a common, simple way of keeping everything contained and organized and will not take up space on your computer. AIs are super helpful for getting everything set up and any troubleshooting you might need. 
