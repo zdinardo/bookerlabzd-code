@@ -20,7 +20,7 @@ st.title("FPLC Chromatogram Plotting")
 uploaded_file = st.file_uploader("Upload FPLC csv export", type=["csv"])
 
 if uploaded_file is None:
-    st.info("Upload a csv file to get started, then be patient - it takes a sec for the first plot to render.")
+    st.info("Upload a csv file to get started. It may take a moment to render, but should then update live as you adjust the plot.")
     st.stop()
 
 # Parsing errors (wrong file format, unexpected columns, etc.) are common
