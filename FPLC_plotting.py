@@ -381,7 +381,7 @@ def make_fplc_plot(
                 ax1.axvline(x=ml, color=color_frac, linestyle="-", linewidth=0.8, ymin=0, ymax=0.1)
                 ax1.text(
                     ml,
-                    ax1.get_ylim()[1] * 0.11 + ax1.get_ylim()[0],
+                    ax1.get_ylim()[1] * 0.15 + ax1.get_ylim()[0],
                     f"{frac:.0f}",
                     rotation=90,
                     va="bottom",
