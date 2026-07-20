@@ -239,7 +239,7 @@ def make_fplc_plot(
         visible_mask = (x_uv_cond >= effective_ml_start) & (x_uv_cond <= effective_ml_end)
         visible_y_uv = y_uv[visible_mask]
         lower_bound = float(visible_y_uv.min()) if not visible_y_uv.empty else 0.0
-        ax1.set_ylim(lower_bound, mAU_height)
+        ax1.set_ylim(lower_bound - mAU_height * 0.1, mAU_height)
 
     # plot uv
     ax1.plot(x_uv_cond, y_uv, color=color_uv, linewidth=1)
@@ -373,17 +373,15 @@ def make_fplc_plot(
                 )
             start_ml = end_ml
 
-    # use the fraction mL column from the parsed fraction data
-    frac_col = "ml" if "ml" in fractions_df.columns else fractions_df.columns[0]
-
     # plot fractions
+    frac_col = "ml" if "ml" in fractions_df.columns else fractions_df.columns[0]  # find mL column in fractions_df
     if show_frac_lines:
         for ml, frac in zip(fractions_df[frac_col], fractions_df["Fraction"]):
             if effective_ml_start < ml < effective_ml_end:
                 ax1.axvline(x=ml, color=color_frac, linestyle="-", linewidth=0.8, ymin=0, ymax=0.1)
                 ax1.text(
                     ml,
-                    ax1.get_ylim()[1] * 0.11,
+                    ax1.get_ylim()[1] * 0.11 + ax1.get_ylim()[0],
                     f"{frac:.0f}",
                     rotation=90,
                     va="bottom",
