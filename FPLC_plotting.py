@@ -18,6 +18,37 @@ plt.rcParams["font.weight"] = "bold"  # Bolds general text (titles, etc.)
 plt.rcParams["axes.labelweight"] = "bold"  # Bolds x and y axis labels
 
 
+def _read_header_row(csv_source):
+    """Return the column headers from line 3 of the CSV export."""
+    if isinstance(csv_source, (bytes, bytearray)):
+        lines = csv_source.decode("utf-16").splitlines()
+        if len(lines) < 3:
+            return []
+        return [cell.strip() for cell in lines[2].split("\t")]
+
+    with open(csv_source, encoding="utf-16") as f:
+        lines = [f.readline() for _ in range(3)]
+    if len(lines) < 3:
+        return []
+    return [cell.strip() for cell in lines[2].split("\t")]
+
+
+def _find_header_index(headers, target):
+    """Find the column index for a header name in the export's line 3 metadata."""
+    for idx, header in enumerate(headers):
+        if str(header).strip().lstrip("\ufeff") == target:
+            return idx
+    return None
+
+
+def _find_previous_ml_index(headers, target_idx):
+    """Return the nearest preceding 'ml' column index for a target column."""
+    for idx in range(target_idx - 1, -1, -1):
+        if str(headers[idx]).strip().lstrip("\ufeff") == "ml":
+            return idx
+    return None
+
+
 def load_fplc_data(csv_source):
     """
     Load and clean a raw FPLC export csv.
@@ -33,11 +64,10 @@ def load_fplc_data(csv_source):
         injection_df  - DataFrame with the injection column (not yet used in plotting)
         fractions_df  - DataFrame with fraction mL positions and fraction numbers
         concB_df      - DataFrame with %B gradient data
-        is_method_run - bool, True if this was a method run (vs. manual run),
-                        which determines which columns hold fraction data
     """
     # The file has 2 rows to ignore at the top, then one header row,
     # then the data starts at row 4 (0-indexed row 3).
+    header_row = _read_header_row(csv_source)
 
     # read UV and conductance data (they use the same mL values in csv for x axis)
     uv_cond_raw = pd.read_csv(
@@ -50,45 +80,70 @@ def load_fplc_data(csv_source):
         na_values=["", '""'],
     )
 
-    # find injection (todo to be implemented)
-    injection_raw = pd.read_csv(
-        _reader(csv_source),
-        sep="\t",
-        header=2,
-        usecols=[6],
-        nrows=1,
-        engine="python",
-        encoding="utf-16",
-        na_values=["", '""'],
+    # match injection/fraction/%B columns from the metadata row (line 3)
+    injection_idx = _find_header_index(header_row, "Injection")
+    fraction_idx = _find_header_index(header_row, "Fraction")
+    concB_idx = _find_header_index(header_row, "%B")
+
+    injection_raw = (
+        pd.read_csv(
+            _reader(csv_source),
+            sep="\t",
+            header=2,
+            usecols=[injection_idx],
+            nrows=1,
+            engine="python",
+            encoding="utf-16",
+            na_values=["", '""'],
+        )
+        if injection_idx is not None
+        else pd.DataFrame(columns=["Injection"])
     )
 
-    # read fraction data (and check if method run or manual run)
-    is_method_run = _is_method_run(csv_source)
-    fractions_raw = pd.read_csv(
-        _reader(csv_source),
-        sep=r"\t",  # whitespace sep (tabs + spaces)
-        header=2,  # header row to parse
-        usecols=[10, 11] if is_method_run else [8, 9],  # mL and fraction# columns
-        engine="python",
-        encoding="utf-16",
-        na_values=["", '""'],
+    # read fraction data (mL positions and fraction numbers)
+    fraction_ml_idx = _find_previous_ml_index(header_row, fraction_idx) if fraction_idx is not None else None
+    fractions_raw = (
+        pd.read_csv(
+            _reader(csv_source),
+            sep=r"\t",  # whitespace sep (tabs + spaces)
+            header=2,  # header row to parse
+            usecols=[fraction_ml_idx, fraction_idx],
+            engine="python",
+            encoding="utf-16",
+            na_values=["", '""'],
+        )
+        if fraction_ml_idx is not None and fraction_idx is not None
+        else pd.DataFrame(columns=["ml", "Fraction"])
     )
 
     # read %B conc
-    concB_raw = pd.read_csv(
-        _reader(csv_source),
-        sep="\t",
-        header=2,
-        usecols=[4, 5],
-        engine="python",
-        encoding="utf-16",
-        na_values=["", '""'],
+    concB_ml_idx = (
+        _find_previous_ml_index(header_row, concB_idx) if concB_idx is not None else None
+    )
+    concB_raw = (
+        pd.read_csv(
+            _reader(csv_source),
+            sep="\t",
+            header=2,
+            usecols=[concB_ml_idx, concB_idx],
+            engine="python",
+            encoding="utf-16",
+            na_values=["", '""'],
+        )
+        if concB_ml_idx is not None and concB_idx is not None
+        else pd.DataFrame(columns=["ml", "%B"])
     )
 
+    if not fractions_raw.empty:
+        fractions_raw.columns = ["ml", "Fraction"]
+    if not concB_raw.empty:
+        concB_raw.columns = ["ml", "%B"]
+
     # clean text in "fraction" column
-    fractions_raw["Fraction"] = (
-        fractions_raw["Fraction"].astype(str).str.replace(r"[^\d\-]", "", regex=True)
-    )
+    if not fractions_raw.empty and "Fraction" in fractions_raw.columns:
+        fractions_raw["Fraction"] = (
+            fractions_raw["Fraction"].astype(str).str.replace(r"[^\d\-]", "", regex=True)
+        )
 
     # convert to numeric
     uv_cond_df = uv_cond_raw.apply(pd.to_numeric, errors="coerce")
@@ -101,7 +156,6 @@ def load_fplc_data(csv_source):
         "injection_df": injection_df,
         "fractions_df": fractions_df,
         "concB_df": concB_df,
-        "is_method_run": is_method_run,
     }
 
 
@@ -110,16 +164,6 @@ def _reader(csv_source):
     if isinstance(csv_source, (bytes, bytearray)):
         return io.BytesIO(csv_source)
     return csv_source  # path-like (str/Path) - pd.read_csv reopens it each call
-
-
-def _is_method_run(csv_source):
-    """Check the 3rd line of the file for 'Logbook' to determine manual vs method run."""
-    if isinstance(csv_source, (bytes, bytearray)):
-        lines = csv_source.decode("utf-16").splitlines(keepends=True)[:3]
-    else:
-        with open(csv_source, encoding="utf-16") as f:
-            lines = [f.readline() for _ in range(3)]
-    return "Logbook" in lines[2]
 
 
 def make_fplc_plot(
@@ -173,13 +217,13 @@ def make_fplc_plot(
     uv_cond_df = data["uv_cond_df"]
     concB_df = data["concB_df"]
     fractions_df = data["fractions_df"]
-    is_method_run = data["is_method_run"]
 
     x_uv_cond = uv_cond_df["ml"]
     y_uv = uv_cond_df["mAU"]
     y_cond = uv_cond_df["mS/cm"] if "mS/cm" in uv_cond_df.columns else None
-    x_gradient = concB_df["ml.2"]
-    y_gradient = concB_df["%B"]
+    gradient_ml_col = "ml" if "ml" in concB_df.columns else concB_df.columns[0]
+    x_gradient = concB_df[gradient_ml_col]
+    y_gradient = concB_df["%B"] if "%B" in concB_df.columns else concB_df.iloc[:, 1]
 
     effective_ml_start = ml_start if ml_start is not None else float(x_uv_cond.min())
     effective_ml_end = ml_end if ml_end is not None else float(x_uv_cond.max())
@@ -192,7 +236,10 @@ def make_fplc_plot(
     if ml_start is not None or ml_end is not None:
         ax1.set_xlim(effective_ml_start, effective_ml_end)
     if mAU_height is not None:
-        ax1.set_ylim(0, mAU_height)
+        visible_mask = (x_uv_cond >= effective_ml_start) & (x_uv_cond <= effective_ml_end)
+        visible_y_uv = y_uv[visible_mask]
+        lower_bound = float(visible_y_uv.min()) if not visible_y_uv.empty else 0.0
+        ax1.set_ylim(lower_bound, mAU_height)
 
     # plot uv
     ax1.plot(x_uv_cond, y_uv, color=color_uv, linewidth=1)
@@ -326,9 +373,8 @@ def make_fplc_plot(
                 )
             start_ml = end_ml
 
-    # fraction column depends on manual vs method run; needed for fraction
-    # lines and/or gel highlighting
-    frac_col = "ml.5" if is_method_run else "ml.4"
+    # use the fraction mL column from the parsed fraction data
+    frac_col = "ml" if "ml" in fractions_df.columns else fractions_df.columns[0]
 
     # plot fractions
     if show_frac_lines:
@@ -349,10 +395,30 @@ def make_fplc_plot(
 
     # shade the selected fraction range (frac_first...frac_last) under UV curve
     if show_frac_highlights and frac_first is not None and frac_last is not None:
-        x_min = fractions_df.loc[fractions_df["Fraction"] == frac_first, frac_col].iloc[0]
-        x_max = fractions_df.loc[fractions_df["Fraction"] == frac_last + 1, frac_col].iloc[0]
-        mask = (x_uv_cond >= x_min) & (x_uv_cond <= x_max)
-        ax1.fill_between(x_uv_cond[mask], y_uv[mask], color=color_frac, alpha=0.15)
+        frac_lookup = fractions_df[[frac_col, "Fraction"]].copy()
+        frac_lookup["Fraction"] = pd.to_numeric(frac_lookup["Fraction"], errors="coerce")
+        frac_lookup = frac_lookup.dropna(subset=["Fraction"]).sort_values("Fraction")
+        selected_rows = frac_lookup.loc[
+            frac_lookup["Fraction"].between(frac_first, frac_last, inclusive="both")
+        ]
+
+        if not selected_rows.empty:
+            x_min = selected_rows.iloc[0][frac_col]
+            last_frac = float(selected_rows.iloc[-1]["Fraction"])
+            next_frac = last_frac + 1
+            next_frac_match = frac_lookup.loc[frac_lookup["Fraction"] == next_frac, frac_col]
+            x_max = next_frac_match.iloc[0] if not next_frac_match.empty else selected_rows.iloc[-1][frac_col]
+            mask = (x_uv_cond >= x_min) & (x_uv_cond <= x_max)
+            if mask.any():
+                visible_mask = (x_uv_cond >= effective_ml_start) & (x_uv_cond <= effective_ml_end)
+                baseline = y_uv[visible_mask].min() if visible_mask.any() else 0.0
+                ax1.fill_between(
+                    x_uv_cond[mask],
+                    y_uv[mask],
+                    baseline,
+                    color=color_frac,
+                    alpha=0.15,
+                )
 
     # plot gel samples (independent of show_frac_lines, matching original intent)
     if show_gel and len(gel_samples) > 0:
