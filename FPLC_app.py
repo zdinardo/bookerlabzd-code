@@ -126,6 +126,7 @@ with st.sidebar.expander("Annotations"):
 ## fractions and highlighting 
 with st.sidebar.expander("Fractions and highlighting"):
     show_frac_lines = st.checkbox("Fraction lines", value=False)
+    hide_first_frac = False
     if show_frac_lines:
         hide_first_frac = st.checkbox("Hide first fraction line", value=False)
     show_frac_highlights = st.checkbox("Highlight fractions", value=False)
