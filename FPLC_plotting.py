@@ -176,7 +176,8 @@ def make_fplc_plot(
     show_gradient=True,
     show_peak_labels=True,
     show_step_labels=True,
-    show_frac_lines=False,
+    show_frac_lines=False,    
+    hide_first_frac=False,
     show_frac_highlights=False,
     show_gel=False,
     find_peak_max=True,
@@ -186,6 +187,7 @@ def make_fplc_plot(
     step_labels=None,
     frac_first=None,
     frac_last=None,
+    frac_samples=None,
     gel_samples=None,
     color_uv="tab:blue",
     color_cond="tab:orange",
@@ -204,7 +206,7 @@ def make_fplc_plot(
     plot" behavior (full data range, auto y-axis). Setting them reproduces
     the original "zoomed plot" behavior. show_frac_lines / show_frac_highlights
     / show_gel default to off, matching the original full plot; turn them on
-    (and set frac_first/frac_last/gel_samples) for the zoomed-plot style view.
+    (and set frac_samples/gel_samples) for the zoomed-plot style view. 
 
     peak_labels and step_labels are dicts of dicts, e.g.:
         peak_labels = {1: {"mL": 10, "label": "wash"}, ...}
@@ -212,6 +214,9 @@ def make_fplc_plot(
     """
     peak_labels = peak_labels or {}
     step_labels = step_labels or {}
+    if frac_samples is None and frac_first is not None and frac_last is not None:
+        frac_samples = range(int(frac_first), int(frac_last) + 1)
+    frac_samples = sorted(set(frac_samples or []))
     gel_samples = gel_samples or []
 
     uv_cond_df = data["uv_cond_df"]
@@ -375,8 +380,15 @@ def make_fplc_plot(
 
     # plot fractions
     frac_col = "ml" if "ml" in fractions_df.columns else fractions_df.columns[0]  # find mL column in fractions_df
+    frac_lookup = fractions_df[[frac_col, "Fraction"]].copy()
+    frac_lookup[frac_col] = pd.to_numeric(frac_lookup[frac_col], errors="coerce")
+    frac_lookup["Fraction"] = pd.to_numeric(frac_lookup["Fraction"], errors="coerce")
+    frac_lookup.loc[0,"Fraction"] = 1  # first fraction label is "Fraction" instead of 1 
+    frac_lookup = frac_lookup.dropna(subset=[frac_col, "Fraction"]).sort_values("Fraction")
     if show_frac_lines:
-        for ml, frac in zip(fractions_df[frac_col], fractions_df["Fraction"]):
+        for ml, frac in zip(frac_lookup[frac_col], frac_lookup["Fraction"]):
+            if hide_first_frac and frac == 1:
+                    continue
             if effective_ml_start < ml < effective_ml_end:
                 ax1.axvline(x=ml, color=color_frac, linestyle="-", linewidth=0.8, ymin=0, ymax=0.1)
                 ax1.text(
@@ -391,31 +403,38 @@ def make_fplc_plot(
                     fontweight="normal",
                 )
 
-    # shade the selected fraction range (frac_first...frac_last) under UV curve
-    if show_frac_highlights and frac_first is not None and frac_last is not None:
-        frac_lookup = fractions_df[[frac_col, "Fraction"]].copy()
-        frac_lookup["Fraction"] = pd.to_numeric(frac_lookup["Fraction"], errors="coerce")
-        frac_lookup = frac_lookup.dropna(subset=["Fraction"]).sort_values("Fraction")
-        selected_rows = frac_lookup.loc[
-            frac_lookup["Fraction"].between(frac_first, frac_last, inclusive="both")
-        ]
+    # Shade each selected fraction interval under the UV curve.
+    if show_frac_highlights and frac_samples:
+        visible_mask = (x_uv_cond >= effective_ml_start) & (x_uv_cond <= effective_ml_end)
+        baseline = y_uv[visible_mask].min() if visible_mask.any() else 0.0
 
-        if not selected_rows.empty:
-            x_min = selected_rows.iloc[0][frac_col]
-            last_frac = float(selected_rows.iloc[-1]["Fraction"])
-            next_frac = last_frac + 1
-            next_frac_match = frac_lookup.loc[frac_lookup["Fraction"] == next_frac, frac_col]
-            x_max = next_frac_match.iloc[0] if not next_frac_match.empty else selected_rows.iloc[-1][frac_col]
+        fraction_groups = []
+        for fraction in frac_samples:
+            if fraction_groups and fraction == fraction_groups[-1][-1] + 1:
+                fraction_groups[-1].append(fraction)
+            else:
+                fraction_groups.append([fraction])
+
+        for fraction_group in fraction_groups:
+            first_row = frac_lookup.loc[frac_lookup["Fraction"] == fraction_group[0]]
+            if first_row.empty:
+                continue
+
+            x_min = first_row.iloc[0][frac_col]
+            last_fraction = fraction_group[-1]
+            next_frac_match = frac_lookup.loc[
+                frac_lookup["Fraction"] == last_fraction + 1, frac_col
+            ]
+            x_max = next_frac_match.iloc[0] if not next_frac_match.empty else x_min
             mask = (x_uv_cond >= x_min) & (x_uv_cond <= x_max)
             if mask.any():
-                visible_mask = (x_uv_cond >= effective_ml_start) & (x_uv_cond <= effective_ml_end)
-                baseline = y_uv[visible_mask].min() if visible_mask.any() else 0.0
                 ax1.fill_between(
                     x_uv_cond[mask],
                     y_uv[mask],
                     baseline,
                     color=color_frac,
                     alpha=0.15,
+                    linewidth=1.5
                 )
 
     # plot gel samples (independent of show_frac_lines, matching original intent)

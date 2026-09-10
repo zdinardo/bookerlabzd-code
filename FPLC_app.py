@@ -14,6 +14,29 @@ import streamlit as st
 
 from FPLC_plotting import load_fplc_data, make_fplc_plot
 
+
+def _parse_fraction_selection(value):
+    """Parse comma-separated fraction numbers and inclusive ranges."""
+    fractions = set()
+    for item in value.split(","):
+        item = item.strip()
+        if not item:
+            continue
+
+        parts = [part.strip() for part in item.split("-")]
+        if len(parts) == 1:
+            fractions.add(int(parts[0]))
+        elif len(parts) == 2 and all(parts):
+            start, end = (int(part) for part in parts)
+            if start > end:
+                raise ValueError(f"Range '{item}' starts after it ends")
+            fractions.update(range(start, end + 1))
+        else:
+            raise ValueError(f"Invalid fraction selection '{item}'")
+
+    return sorted(fractions)
+
+
 st.set_page_config(page_title="FPLC Plotting", layout="wide")
 st.title("FPLC Chromatogram Plotting")
 
@@ -41,17 +64,14 @@ plot_title = st.sidebar.text_input("Plot title", value=default_title)
 
 ## axes options 
 with st.sidebar.expander("Axes ranges"):
-    use_custom_range = st.checkbox("Zoom to custom mL range or mAU height", value=False)
-    if use_custom_range:
-        full_min = float(data["uv_cond_df"]["ml"].min())
-        full_max = float(data["uv_cond_df"]["ml"].max())
-        col1, col2 = st.columns(2)
-        ml_start = col1.number_input("mL start", value=full_min)
-        ml_end = col2.number_input("mL end", value=full_max)
-        use_custom_height = st.checkbox("Set a fixed UV (mAU) axis height", value=False)
-        mAU_height = st.number_input("mAU height", min_value=1.0, value=1750.0) if use_custom_height else None
-    else:
-        ml_start, ml_end, mAU_height = None, None, None
+    full_min = float(data["uv_cond_df"]["ml"].min())
+    full_max = float(data["uv_cond_df"]["ml"].max())
+    col1, col2 = st.columns(2)
+    ml_start = col1.number_input("mL start", value=full_min)
+    ml_end = col2.number_input("mL end", value=full_max)
+    use_custom_height = st.checkbox("Set a fixed UV (mAU) axis height", value=False)
+    mAU_height = st.number_input("mAU height", min_value=1.0, value=1750.0) if use_custom_height else None
+    
 
 ## traces 
 with st.sidebar.expander("Traces"):
@@ -106,12 +126,17 @@ with st.sidebar.expander("Annotations"):
 ## fractions and highlighting 
 with st.sidebar.expander("Fractions and highlighting"):
     show_frac_lines = st.checkbox("Fraction lines", value=False)
-    show_frac_highlights = st.checkbox("Highlight a fraction range", value=False)
-    frac_first = frac_last = None
+    if show_frac_lines:
+        hide_first_frac = st.checkbox("Hide first fraction line", value=False)
+    show_frac_highlights = st.checkbox("Highlight fractions", value=False)
+    frac_samples = []
     if show_frac_highlights:
-        col1, col2 = st.columns(2)
-        frac_first = col1.number_input("First fraction", value=16, step=1)
-        frac_last = col2.number_input("Last fraction", value=23, step=1)
+        frac_input = st.text_input("Fraction numbers or ranges (e.g., 1, 3, 16-23)", value="16-23")
+        try:
+            frac_samples = _parse_fraction_selection(frac_input)
+        except ValueError as e:
+            st.error(f"Invalid fraction selection: {e}")
+            st.stop()
     show_gel = st.checkbox("Highlight gel sample fractions", value=False)
     gel_samples = []
     if show_gel:
@@ -139,6 +164,7 @@ fig = make_fplc_plot(
     show_peak_labels=show_peak_labels,
     show_step_labels=show_step_labels,
     show_frac_lines=show_frac_lines,
+    hide_first_frac=hide_first_frac,
     show_frac_highlights=show_frac_highlights,
     show_gel=show_gel,
     find_peak_max=find_peak_max,
@@ -146,8 +172,7 @@ fig = make_fplc_plot(
     peak_labels=peak_labels,
     peak_label_offset=peak_label_offset,
     step_labels=step_labels,
-    frac_first=frac_first,
-    frac_last=frac_last,
+    frac_samples=frac_samples,
     gel_samples=gel_samples,
     color_uv=color_uv,
     color_cond=color_cond,
