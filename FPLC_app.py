@@ -16,8 +16,8 @@ from FPLC_plotting import load_fplc_data, make_fplc_plot
 
 
 def _parse_fraction_selection(value):
-    """Parse comma-separated fraction numbers and inclusive ranges."""
-    fractions = set()
+    """Parse comma-separated fraction numbers and inclusive ranges by group."""
+    fraction_groups = []
     for item in value.split(","):
         item = item.strip()
         if not item:
@@ -25,16 +25,16 @@ def _parse_fraction_selection(value):
 
         parts = [part.strip() for part in item.split("-")]
         if len(parts) == 1:
-            fractions.add(int(parts[0]))
+            fraction_groups.append([int(parts[0])])
         elif len(parts) == 2 and all(parts):
             start, end = (int(part) for part in parts)
             if start > end:
                 raise ValueError(f"Range '{item}' starts after it ends")
-            fractions.update(range(start, end + 1))
+            fraction_groups.append(list(range(start, end + 1)))
         else:
             raise ValueError(f"Invalid fraction selection '{item}'")
 
-    return sorted(fractions)
+    return fraction_groups
 
 
 st.set_page_config(page_title="FPLC Plotting", layout="wide")
@@ -75,8 +75,12 @@ with st.sidebar.expander("Axes ranges"):
 
 ## traces 
 with st.sidebar.expander("Traces"):
-    show_cond = st.checkbox("Conductivity", value=True)
-    show_gradient = st.checkbox("%B gradient", value=False)
+    show_UV = st.checkbox("UV trace", value=True)
+    color_uv = st.color_picker("UV color", value="#1f77b4")
+    show_cond = st.checkbox("Conductivity trace", value=True)
+    color_cond = st.color_picker("Conductivity color", value="#ff7f0e")
+    show_gradient = st.checkbox("%B gradient trace", value=False)
+    color_gradient = st.color_picker("%B gradient color", value="#2ca02c")
 
 ## annotations 
 with st.sidebar.expander("Annotations"):
@@ -126,31 +130,42 @@ with st.sidebar.expander("Annotations"):
 ## fractions and highlighting 
 with st.sidebar.expander("Fractions and highlighting"):
     show_frac_lines = st.checkbox("Fraction lines", value=False)
+    color_frac = st.color_picker("Fraction line color", value="#2ca02c")
     hide_first_frac = False
     if show_frac_lines:
         hide_first_frac = st.checkbox("Hide first fraction line", value=False)
     show_frac_highlights = st.checkbox("Highlight fractions", value=False)
     frac_samples = []
+    frac_sample_groups = []
+    frac_group_colors = []
     if show_frac_highlights:
         frac_input = st.text_input("Fraction numbers or ranges (e.g., 1, 3, 16-23)", value="16-23")
         try:
-            frac_samples = _parse_fraction_selection(frac_input)
+            frac_sample_groups = _parse_fraction_selection(frac_input)
         except ValueError as e:
             st.error(f"Invalid fraction selection: {e}")
             st.stop()
+        frac_samples = sorted({fraction for group in frac_sample_groups for fraction in group})
+        default_group_colors = [color_frac, "#d62728", "#9467bd", "#17becf", "#ff7f0e"]
+        for group_index, group in enumerate(frac_sample_groups):
+            group_label = ", ".join(str(fraction) for fraction in group)
+            default_color = default_group_colors[group_index % len(default_group_colors)]
+            frac_group_colors.append(
+                st.color_picker(
+                    f"Fraction group {group_index + 1}: {group_label}",
+                    value=default_color,
+                    key=f"frac_group_color_{group_index}",
+                )
+            )
     show_gel = st.checkbox("Highlight gel sample fractions", value=False)
+    color_gel = st.color_picker("Gel sample color", value="#c9a339")
     gel_samples = []
     if show_gel:
         gel_input = st.text_input("Gel sample fractions (comma-separated)", value="9")
         gel_samples = [int(x.strip()) for x in gel_input.split(",") if x.strip()]
 
-## colors and figure size
-with st.sidebar.expander("Colors and size"):
-    color_uv = st.color_picker("UV color", value="#1f77b4")
-    color_cond = st.color_picker("Conductivity color", value="#ff7f0e")
-    color_gradient = st.color_picker("%B gradient color", value="#2ca02c")
-    color_frac = st.color_picker("Fraction color", value="#2ca02c")
-    color_gel = st.color_picker("Gel sample color", value="#c9a339")
+## figure size
+with st.sidebar.expander("Figure size"):
     fig_width = st.number_input("Figure width", min_value=2.0, max_value=30.0, value=8.0)
     fig_height = st.number_input("Figure height", min_value=2.0, max_value=30.0, value=5.0)
 
@@ -160,6 +175,7 @@ fig = make_fplc_plot(
     ml_start=ml_start,
     ml_end=ml_end,
     mAU_height=mAU_height,
+    show_uv=show_UV,
     show_cond=show_cond,
     show_gradient=show_gradient,
     show_peak_labels=show_peak_labels,
@@ -174,6 +190,8 @@ fig = make_fplc_plot(
     peak_label_offset=peak_label_offset,
     step_labels=step_labels,
     frac_samples=frac_samples,
+    frac_sample_groups=frac_sample_groups,
+    frac_group_colors=frac_group_colors,
     gel_samples=gel_samples,
     color_uv=color_uv,
     color_cond=color_cond,
