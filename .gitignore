@@ -17,3 +17,6 @@ venv/
 FPLC_data/
 MS_data/
 UV_scan/
+
+# other misc working data 
+All Homologs.xlsx
