@@ -172,6 +172,7 @@ def make_fplc_plot(
     ml_start=None,
     ml_end=None,
     mAU_height=None,
+    show_uv=True,
     show_cond=False,
     show_gradient=True,
     show_peak_labels=True,
@@ -188,6 +189,8 @@ def make_fplc_plot(
     frac_first=None,
     frac_last=None,
     frac_samples=None,
+    frac_sample_groups=None,
+    frac_group_colors=None,
     gel_samples=None,
     color_uv="tab:blue",
     color_cond="tab:orange",
@@ -207,6 +210,8 @@ def make_fplc_plot(
     the original "zoomed plot" behavior. show_frac_lines / show_frac_highlights
     / show_gel default to off, matching the original full plot; turn them on
     (and set frac_samples/gel_samples) for the zoomed-plot style view. 
+    frac_sample_groups and frac_group_colors optionally assign a separate
+    color to each comma-separated fraction group.
 
     peak_labels and step_labels are dicts of dicts, e.g.:
         peak_labels = {1: {"mL": 10, "label": "wash"}, ...}
@@ -217,6 +222,9 @@ def make_fplc_plot(
     if frac_samples is None and frac_first is not None and frac_last is not None:
         frac_samples = range(int(frac_first), int(frac_last) + 1)
     frac_samples = sorted(set(frac_samples or []))
+    if frac_sample_groups is None:
+        frac_sample_groups = [frac_samples] if frac_samples else []
+    frac_group_colors = frac_group_colors or [color_frac] * len(frac_sample_groups)
     gel_samples = gel_samples or []
 
     uv_cond_df = data["uv_cond_df"]
@@ -247,8 +255,9 @@ def make_fplc_plot(
         ax1.set_ylim(lower_bound - mAU_height * 0.1, mAU_height)
 
     # plot uv
-    ax1.plot(x_uv_cond, y_uv, color=color_uv, linewidth=1)
-    ax1.tick_params(axis="y", colors=color_uv)
+    if show_uv:
+        ax1.plot(x_uv_cond, y_uv, color=color_uv, linewidth=1)
+        ax1.tick_params(axis="y", colors=color_uv)
 
     # plot conductance
     if show_cond and y_cond is not None:
@@ -408,14 +417,7 @@ def make_fplc_plot(
         visible_mask = (x_uv_cond >= effective_ml_start) & (x_uv_cond <= effective_ml_end)
         baseline = y_uv[visible_mask].min() if visible_mask.any() else 0.0
 
-        fraction_groups = []
-        for fraction in frac_samples:
-            if fraction_groups and fraction == fraction_groups[-1][-1] + 1:
-                fraction_groups[-1].append(fraction)
-            else:
-                fraction_groups.append([fraction])
-
-        for fraction_group in fraction_groups:
+        for group_index, fraction_group in enumerate(frac_sample_groups):
             first_row = frac_lookup.loc[frac_lookup["Fraction"] == fraction_group[0]]
             if first_row.empty:
                 continue
@@ -432,7 +434,7 @@ def make_fplc_plot(
                     x_uv_cond[mask],
                     y_uv[mask],
                     baseline,
-                    color=color_frac,
+                    color=frac_group_colors[group_index] if group_index < len(frac_group_colors) else color_frac,
                     alpha=0.15,
                     linewidth=1.5
                 )
