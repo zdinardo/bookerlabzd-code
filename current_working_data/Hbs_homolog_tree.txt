@@ -1,5 +1,6 @@
 <phyloxml xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.phyloxml.org" xsi:schemaLocation="http://www.phyloxml.org http://www.phyloxml.org/1.10/phyloxml.xsd">
 <phylogeny rooted="true"><clade>
+<name>OROOT</name>
 <color><red>255</red><green>137</green><blue>0</blue><alpha>255</alpha></color>
 <clade>
 <branch_length>0.0283636043</branch_length>
