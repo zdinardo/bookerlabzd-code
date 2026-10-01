@@ -5,3 +5,4 @@ numpy>=2.4.3
 pandas>=3.0.1
 streamlit>=1.38.0
 bio>=1.8.4
+toytree>=3.0.11
